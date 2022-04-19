@@ -1,14 +1,15 @@
 <?php
 namespace Terrazza\Component\HttpRouting\ClassRouting;
 use Psr\Log\LoggerInterface;
+use ReflectionMethod;
 use RuntimeException;
 use Terrazza\Component\Http\Request\HttpServerRequestInterface;
 use Terrazza\Component\Routing\IRouteMatcher;
-use Terrazza\Component\Routing\Route;
 use Terrazza\Component\Routing\RouteMatcher;
 use Terrazza\Component\Routing\RouteSearch;
+use Terrazza\Concept\Interfaces\Controller\Http\Payment\HttpPaymentPostRequestBody;
 
-class ClassRouter {
+class ClassRouter implements ClassRouterInterface {
     private string $routingFile;
     private LoggerInterface $logger;
     private IRouteMatcher $routeMatcher;
@@ -29,14 +30,18 @@ class ClassRouter {
         return require_once($this->routingFile);
     }
 
-    public function getRoute(HttpServerRequestInterface $request): ?Route {
+    public function getRoute(HttpServerRequestInterface $request): ?ClassRoute {
         $routeSearch                                = new RouteSearch(
             $request->getUri()->getPath(),
             $request->getMethod(),
         );
         //
-        return $this->routeMatcher->getRoute(
-            $routeSearch,
-            $this->getRoutes());
+        if ($route = $this->routeMatcher->getRoute($routeSearch, $this->getRoutes())) {
+            return new ClassRoute(
+                $route->getUri(),
+                HttpPaymentPostRequestBody::class
+            );
+        }
+        return null;
     }
 }
