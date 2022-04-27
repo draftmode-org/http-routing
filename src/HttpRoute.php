@@ -1,10 +1,8 @@
 <?php
-namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
-use Terrazza\Component\Http\Request\HttpServerRequestInterface;
-use Terrazza\Component\HttpRouting\HttpRouteInterface;
+namespace Terrazza\Component\HttpRouting;
 
-class OpenApiRoute implements HttpRouteInterface {
+class HttpRoute {
     private string $routePath;
     private string $routeMethod;
 
@@ -14,8 +12,8 @@ class OpenApiRoute implements HttpRouteInterface {
      */
     public function __construct(string $routePath, string $routeMethod)
     {
-        $this->routePath = $routePath;
-        $this->routeMethod = $routeMethod;
+        $this->routePath                        = $routePath;
+        $this->routeMethod                      = $routeMethod;
     }
 
     /**

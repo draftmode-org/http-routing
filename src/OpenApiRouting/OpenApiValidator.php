@@ -1,194 +1,118 @@
 <?php
 namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
-use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Terrazza\Component\Http\Request\HttpServerRequestInterface;
-use Terrazza\Component\Validator\ValueValidatorInterface;
+use Terrazza\Component\HttpRouting\HttpRoute;
+use Terrazza\Component\HttpRouting\HttpValidatorTrait;
+use Terrazza\Component\Validator\ValueValidator;
 use Terrazza\Component\Validator\ValueValidatorSchema;
 
 class OpenApiValidator implements OpenApiValidatorInterface {
+    use HttpValidatorTrait;
+    private OpenApiYamlReader $yamlReader;
+    private ValueValidator $validator;
     private LoggerInterface $logger;
-    private ValueValidatorInterface $valueValidator;
-    private array $components;
+    CONST default_request_content_type              = "application/json";
 
-    public function __construct(ValueValidatorInterface $valueValidator, LoggerInterface $logger) {
-        $this->valueValidator                       = $valueValidator;
+    public function __construct(LoggerInterface $logger) {
+        $this->yamlReader                           = new OpenApiYamlReader($logger);
+        $this->validator                            = new ValueValidator();
         $this->logger                               = $logger;
     }
 
     /**
      * @param string $yamlFileName
-     * @return void
+     * @param HttpRoute $route
+     * @param HttpServerRequestInterface $request
      */
-    private function initializeComponents(string $yamlFileName) : void {
-        $yaml                                       = yaml_parse_file($yamlFileName);
-        $this->components                           = $yaml["components"] ?? [];
-    }
-
-    public function validate(string $yamlFileName, OpenApiRoute $route, HttpServerRequestInterface $request) : void {
-        $this->initializeComponents($yamlFileName);
-        $this->validateParameters($route->getParameters(), $route->getPath(), $request);
-        if ($requestBody = $route->getRequestBody()) {
-            if ($requestBodySchemas = $this->getPropertyByKey($requestBody, "content")) {
-                $contentType                        = $request->getHeaderLine("content-type");
-                $requestBodySchema                  = $this->getRequestContentTypeSchema($contentType, $requestBodySchemas);
-                $requestBodyContent                 = $this->getRequestBodyContentEncoded($contentType,$request->getBody()->getContents());
-                $this->validateRequestBody($requestBodyContent, $requestBodySchema);
-            }
-        }
-    }
-
-    private function validateParameters(array $properties, string $path, HttpServerRequestInterface $request) : void {
-        foreach ($properties as $property) {
-            $propertyIn                             = $property["in"] ?? "-";
-            $propertyName                           = $property["name"] ?? "-";
-            $propertyValue                          = null;
-            switch ($propertyIn) {
-                case "path":
-                    $propertyValue                  = $request->getPathParam($path, $propertyName);
-                    break;
-                case "query":
-                    $propertyValue                  = $request->getQueryParam($propertyName);
-                    break;
-            }
-            if ($propertyValue) {
-                if ($propertySchema = $this->getPropertyWithKey($property["schema"], "type")) {
-                    try {
-                        $contentSchema              = (new ValueValidatorSchema($propertyName))
-                            ->setPatterns($propertySchema["patterns"])
-                            ->setFormat($propertySchema["format"])
-                            ->setMinLength($propertySchema["minLength"])
-                            ->setMaxLength($propertySchema["maxLength"])
-                            ->setMinItems($propertySchema["minItems"])
-                            ->setMaxItems($propertySchema["maxItems"]);
-                        $this->valueValidator->validateContent($propertyValue, $contentSchema);
-                    } catch (InvalidArgumentException $exception) {
-                        throw new InvalidArgumentException("parameter $propertyName in $propertyIn invalid, ".$exception->getMessage());
-                    }
-                }
-            }
-        }
-    }
-
-    private function getRequestContentTypeSchema(string $contentType, array $requestSchemas) : array {
-        if (array_key_exists($contentType, $requestSchemas)) {
-            $requestSchema                          = $requestSchemas[$contentType];
-            if (array_key_exists("schema", $requestSchema)) {
-                return $requestSchema["schema"];
-            } else {
-                throw new RuntimeException("property schema in content/$contentType missing");
-            }
-        }
-        $supportedContentTypes                      = array_keys($requestSchemas);
-        throw new InvalidArgumentException("expected content types (".join(",", $supportedContentTypes)."), given $contentType");
-    }
-
-    private function getRequestBodyContentEncoded(string $contentType, string $content) {
-        switch ($contentType) {
-            default:
-            case "application/json":
-                $contentEncoded                     = json_decode($content);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    return $contentEncoded;
-                }
-                throw new InvalidArgumentException("requestBody is not valid $contentType");
-        }
-    }
-
-    private function validateRequestBody($content, array $schema) : void {
-        if (!array_key_exists("type", $schema)) {
-            throw new RuntimeException("missing property in schema, type");
-        }
-        if (!array_key_exists("properties", $schema)) {
-            throw new RuntimeException("missing property in schema, properties");
-        }
-        $properties                                 = $schema["properties"];
-        /**
-         * extend schema-required fields
-         */
-        if (array_key_exists("required", $schema)) {
-            foreach ($schema["required"] as $propertyName) {
-                if (array_key_exists($propertyName, $properties)) {
-                    $properties[$propertyName]["required"] = true;
-                }
-            }
-        }
-        $this->validateContentByProperties($properties, $content);
-    }
-
-    private function validateContentByProperties(array $properties, $content, ?string $parentPropertyName=null) {
-        foreach ($properties as $propertyName => $property) {
-            $fullPropertyName                       = $parentPropertyName ? $parentPropertyName.".".$propertyName : $propertyName;
-            $inputRequired                          = $property["required"] ?? false;
-            $inputExists                            = property_exists($content, $propertyName);
-            if ($inputRequired && !$inputExists) {
-                throw new InvalidArgumentException("argument $fullPropertyName required, missing");
-            }
-            if ($inputExists) {
-                $inputValue                         = $content->{$propertyName};
-                if ($propertyType = $this->getPropertyWithKey($property, "type")) {
-                    $this->valueValidator->validateContentType($inputValue, $propertyType["type"] ?? null);
-                    if ($propertyType["type"]==="object" && is_object($inputValue)) {
-                        $this->validateContentByProperties($propertyType["properties"], $inputValue, $fullPropertyName);
-                    }
-                    try {
-                        $inputSchema                = (new ValueValidatorSchema($propertyName))
-                            ->setPatterns($propertyType["patterns"])
-                            ->setFormat($propertyType["format"])
-                            ->setMinLength($propertyType["minLength"])
-                            ->setMaxLength($propertyType["maxLength"])
-                            ->setMinItems($propertyType["minItems"])
-                            ->setMaxItems($propertyType["maxItems"]);
-                        $this->valueValidator->validateContent($inputValue,$inputSchema);
-                    } catch (InvalidArgumentException $exception) {
-                        throw new InvalidArgumentException("argument $fullPropertyName ".$exception->getMessage());
-                    }
-                } else {
-                    throw new RuntimeException("no type for propertyName found");
-                }
-            }
-        }
-    }
-
-    private function getPropertyByKey(array $property, string $propertyKey) :?array {
-        if ($schema = $this->getPropertyWithKey($property, $propertyKey)) {
-            return $schema[$propertyKey];
+    public function validate(string $yamlFileName, HttpRoute $route, HttpServerRequestInterface $request) : void {
+        $routePath                                  = $route->getRoutePath();
+        $routeMethod                                = $route->getRouteMethod();
+        //
+        $this->yamlReader                           = $this->yamlReader->load($yamlFileName);
+        //
+        if ($querySchema = $this->getParameterSchemas($routePath, $routeMethod, "query")) {
+            $this->logger->debug("requestParameters for $routePath:$routeMethod/query found");
+            $this->validator->validateSchemas($request->getQueryParams(), $querySchema, "queryParam");
+            $this->logger->debug("requestParameters for $routePath:$routeMethod/query isValid");
         } else {
-            return null;
+            $this->logger->debug("requestParameters for $routePath:$routeMethod/query found");
         }
-    }
-    private function getPropertyWithKey(array $property, string $propertyType) :?array {
-        if (array_key_exists($propertyType, $property)) {
-            return $property;
-        } elseif (array_key_exists("\$ref", $property)) {
-            return $this->getPropertyWithKey($this->getComponentsSchema($property["\$ref"]), $propertyType);
+
+        if ($pathSchema = $this->getParameterSchemas($routePath, $routeMethod, "path")) {
+            $this->logger->debug("requestParameters for $routePath:$routeMethod/path found");
+            $this->validator->validateSchemas($request->getPathParams($routePath), $pathSchema, "pathParam");
+            $this->logger->debug("requestParameters for $routePath:$routeMethod/path isValid");
         } else {
-            return null;
+            $this->logger->debug("no requestParameters for $routePath:$routeMethod/path found");
+        }
+
+        $requestContentType                         = $request->getHeaderLine("content-type");
+        if ($requestBodySchema = $this->getRequestBodySchema($routePath, $routeMethod, $requestContentType)) {
+            $this->logger->debug("requestBodySchema for $routePath:$routeMethod/$requestContentType found");
+            $requestBody                            = $this->getRequestBodyContentEncoded($requestContentType, $request->getBody()->getContents());
+            $this->validator->validateSchema($requestBody, $requestBodySchema);
+            $this->logger->debug("requestBodySchema for $routePath:$routeMethod/$requestContentType isValid");
+        } else {
+            $this->logger->debug("no requestBodySchema for $routePath:$routeMethod/$requestContentType found");
         }
     }
 
     /**
-     * @param string $ref
-     * @return array|null
+     * @param string $routePath
+     * @param string $routeMethod
+     * @param string|null $validContentType
+     * @return ValueValidatorSchema|null
      */
-    private function getComponentsSchema(string $ref) :?array {
-        $refs                                   = explode("/", $ref);
-        array_shift($refs);
-        $componentsType                         = array_shift($refs);
-        if ($componentsType !== "components") {
-            throw new RuntimeException("property components missing in yaml");
-        }
-        $componentType                          = array_shift($refs);
-        if (!array_key_exists($componentType, $this->components)) {
-            throw new RuntimeException("components/$componentType missing in yaml");
-        }
-        $schemaTypes                            = $this->components[$componentType];
-        $type                                   = array_shift($refs);
-        if (array_key_exists($type, $schemaTypes)) {
-            return $schemaTypes[$type];
+    private function getRequestBodySchema(string $routePath, string $routeMethod, string $validContentType=null) :?ValueValidatorSchema {
+        $validContentType                           = $validContentType ?? self::default_request_content_type;
+        if ($requestBodyProperties = $this->yamlReader->getRequestBodyProperties($routePath, $routeMethod, $validContentType)) {
+            return $this->createValidatorSchema("requestBody", $requestBodyProperties);
         }
         return null;
+    }
+
+    /**
+     * @param string $routePath
+     * @param string $routeMethod
+     * @param string $parametersType
+     * @return ValueValidatorSchema[]
+     */
+    private function getParameterSchemas(string $routePath, string $routeMethod, string $parametersType) : array {
+        $parameterProperties                        = $this->yamlReader->getParameterProperties($routePath, $routeMethod, $parametersType);
+        $schema                                     = [];
+        foreach ($parameterProperties as $parameterName => $properties) {
+            $schema[$parameterName]                 = $this->createValidatorSchema($parameterName, $properties);
+        }
+        return $schema;
+    }
+
+    /**
+     * @param string $parameterName
+     * @param array $properties
+     * @return ValueValidatorSchema
+     */
+    private function createValidatorSchema(string $parameterName, array $properties) : ValueValidatorSchema {
+        $schema                                     = (new ValueValidatorSchema($parameterName));
+        if (array_key_exists("required", $properties)) {
+            $schema->setOptional(!$properties["required"]);
+        }
+        $schema
+            ->setType($properties["type"])
+            ->setPatterns($properties["patterns"] ?? null)
+            ->setFormat($properties["format"] ?? null)
+            ->setMinLength($properties["minLength"] ?? null)
+            ->setMaxLength($properties["maxLength"] ?? null)
+            ->setMinItems($properties["minItems"] ?? null)
+            ->setMaxItems($properties["maxItems"] ?? null);
+        if (array_key_exists("properties", $properties)) {
+            $childSchema                            = [];
+            foreach ($properties["properties"] as $childName => $childProperties) {
+                $childSchema[$childName]            = $this->createValidatorSchema($childName, $childProperties);
+            }
+            $schema->setChildSchemas($childSchema);
+        }
+        return $schema;
     }
 }
