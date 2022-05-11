@@ -6,7 +6,8 @@ use RuntimeException;
 
 class OpenApiYamlReader implements OpenApiYamlReaderInterface {
     private LoggerInterface $logger;
-    private array $content=[];
+    private ?array $content=null;
+    private ?array $paths=null;
     public function __construct(LoggerInterface $logger) {
         $this->logger                               = $logger;
     }
@@ -16,63 +17,53 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @return OpenApiYamlReaderInterface
      */
     public function load(string $yamlFileName) : OpenApiYamlReaderInterface {
-        if (!file_exists($yamlFileName)) {
-            throw new RuntimeException("OpenApiReader file $yamlFileName does not exist");
-        }
-        $this->content                          = yaml_parse_file($yamlFileName);
-        return $this;
-    }
-
-    /**
-     * @param string $path
-     * @param string $method
-     * @return array|null
-     */
-    private function getPath(string $path, string $method) :?array {
-        $paths                                       = $this->getPaths();
-        if (array_key_exists($path, $paths)) {
-            if (array_key_exists($method, $paths[$path])) {
-                return $paths[$path][$method];
+        if (is_null($this->content)) {
+            if (!file_exists($yamlFileName)) {
+                throw new RuntimeException("yaml.file $yamlFileName does not exist");
             }
+            $this->content                          = yaml_parse_file($yamlFileName);
         }
-        return null;
+        return $this;
     }
 
     /**
      * @return array
      */
     public function getPaths() : array {
-        $yaml                                       = $this->content;
-        $paths                                      = [];
-        foreach ($yaml["paths"] ?? [] as $uri => $methods) {
-            $uriParameter                           = [];
-            foreach ($methods as $method => $parameters) {
-                if ($method === "parameters") {
-                    $uriParameter                   = $parameters;
+        if (is_null($this->paths)) {
+            $skipMethods                            = ["parameters"];
+            $yaml                                   = $this->content ?? [];
+            $paths                                  = [];
+            foreach ($yaml["paths"] ?? [] as $uri => $methods) {
+                $uriParameters                      = [];
+                foreach ($methods as $method => $parameters) {
+                    if ($method === "parameters") {
+                        $uriParameters              = $parameters;
+                    }
+                }
+                foreach ($methods as $method => $properties) {
+                    if (in_array($method, $skipMethods)) {
+                        continue;
+                    }
+                    if (!array_key_exists($uri, $paths)) {
+                        $paths[$uri]                = [];
+                    }
+                    $properties["parameters"]       = $this->mergeParameters($uriParameters, $properties["parameters"] ?? []);
+                    $paths[$uri][$method]           = $properties;
                 }
             }
-            foreach ($methods as $method => $properties) {
-                if ($method === "parameters") {
-                    continue;
-                }
-                $properties["parameters"]            = array_filter(
-                    array_merge($properties["parameters"] ?? [],
-                        $uriParameter));
-                if (!array_key_exists($uri, $paths)) {
-                    $paths[$uri]                    = [];
-                }
-                $paths[$uri][$method]               = $properties;
-            }
+            $this->paths                            = $paths;
         }
-        return $paths;
+        return $this->paths;
     }
+
 
     /**
      * @param string $ref
      * @return array
      */
     public function getContentByRef(string $ref) : array {
-        $content                                = $this->content;
+        $content                                = $this->content ?? [];
         $refs                                   = explode("/", $ref);
         array_shift($refs);
         $node                                   = [];
@@ -81,7 +72,7 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             if (array_key_exists($refKey, $content)) {
                 $content                            = $content[$refKey];
             } else {
-                throw new RuntimeException("node ".join("/", $node). " missing in yaml");
+                throw new RuntimeException("node ".join("/", $node). " does not exist");
             }
         }
         return $content;
@@ -91,28 +82,16 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @param string $routePath
      * @param string $routeMethod
      * @param string $parametersType
-     * @return array
+     * @return array|null
      */
-    public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) : array {
+    public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) :?array {
         $this->logger->debug("get properties $routePath:$routeMethod/$parametersType");
-        $properties                                 = $this->getPath($routePath, $routeMethod);
-        $schema                                     = [];
-        foreach ($properties["parameters"] ?? [] as $parameter) {
-            $parameterType                          = $parameter["in"] ?? "-";
-            if ($parametersType === $parameterType) {
-                $parameterName                      = $parameter["name"] ?? "-";
-                $schemaNode                         = "schema";
-                if (!array_key_exists($schemaNode, $parameter)) {
-                    throw new RuntimeException("node $schemaNode in properties/$parametersType for $parameterName does not exist");
-                }
-                $parameterSchema                    = $parameter[$schemaNode];
-                if (array_key_exists("required", $parameter)) {
-                    $parameterSchema["required"]    = $parameter["required"];
-                }
-                $schema[$parameterName]             = $this->buildParameterProperties($parameterName, $parameterSchema);
+        if ($properties = $this->getPath($routePath, $routeMethod)) {
+            if (array_key_exists($parametersType, $properties["parameters"])) {
+                return $properties["parameters"][$parametersType];
             }
         }
-        return $schema;
+        return null;
     }
 
     /**
@@ -153,6 +132,49 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             throw new RuntimeException("node $schemaNode for $contentRef does not exist");
         }
         return $this->buildParameterProperties("", $requestBodyContentType[$schemaNode]);
+    }
+
+    /**
+     * @param array $uriParameters
+     * @param array $methodParameters
+     * @return array
+     */
+    private function mergeParameters(array $uriParameters, array $methodParameters) : array {
+        $parameters                                 = array_filter(array_merge($uriParameters, $methodParameters));
+        $response                                   = [];
+        foreach ($parameters as $parameter) {
+            $type                                   = $parameter["in"] ?? "-";
+            if (!array_key_exists($type, $response)) {
+                $response[$type]                    = [];
+            }
+            $name                                   = $parameter["name"] ?? "-";
+            $schemaNode                             = "schema";
+            if (!array_key_exists($schemaNode, $parameter)) {
+                throw new RuntimeException("node $schemaNode in parameters/$type for $name does not exist");
+            }
+            $parameterSchema                        = $parameter[$schemaNode];
+            if (array_key_exists("required", $parameter)) {
+                $parameterSchema["required"]        = $parameter["required"];
+            }
+            $response[$type][$name]                 = $this->buildParameterProperties($name, $parameterSchema);
+        }
+        return $response;
+    }
+
+
+    /**
+     * @param string $path
+     * @param string $method
+     * @return array|null
+     */
+    private function getPath(string $path, string $method) :?array {
+        $paths                                       = $this->getPaths();
+        if (array_key_exists($path, $paths)) {
+            if (array_key_exists($method, $paths[$path])) {
+                return $paths[$path][$method];
+            }
+        }
+        return null;
     }
 
     /**

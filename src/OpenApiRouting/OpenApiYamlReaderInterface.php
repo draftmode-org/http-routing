@@ -10,13 +10,6 @@ interface OpenApiYamlReaderInterface {
     public function load(string $yamlFileName) : OpenApiYamlReaderInterface;
 
     /**
-     * @param string $path
-     * @param string $method
-     * @return array|null
-     */
-    //public function getPath(string $path, string $method) :?array;
-
-    /**
      * @return array
      */
     public function getPaths() : array;
@@ -31,9 +24,9 @@ interface OpenApiYamlReaderInterface {
      * @param string $routePath
      * @param string $routeMethod
      * @param string $parametersType
-     * @return array
+     * @return array|null
      */
-    public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) : array;
+    public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) :?array;
 
     /**
      * @param string $routePath

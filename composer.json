@@ -1,7 +1,7 @@
 {
     "name": "terrazza/http-routing",
     "type" : "library",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "description": "Terrazza Component Http-Routing",
     "license": "MIT",
     "config" : {
@@ -15,14 +15,23 @@
     ],
     "require": {
         "php": ">=7.4",
+        "terrazza/validator": "dev-main",
+        "terrazza/routing": "dev-main",
+        "terrazza/http": "dev-main",
         "psr/log": "1.1.*",
         "ext-json": "*",
         "ext-libxml": "*"
     },
+    "repositories": [
+        {
+            "type": "git",
+            "url": "https://github.com/terrazza/dev-logger.git"
+        }
+    ],
     "require-dev" : {
+        "terrazza/dev-logger": "dev-main",
         "phpunit/phpunit": "^9.3",
-        "vimeo/psalm": "4.x-dev",
-        "terrazza/logger": "dev-main"
+        "vimeo/psalm": "4.x-dev"
     },
     "autoload": {
         "psr-4": {

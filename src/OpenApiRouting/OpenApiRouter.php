@@ -11,10 +11,12 @@ use Terrazza\Component\Routing\RouteSearch;
 class OpenApiRouter implements OpenApiRouterInterface {
     private LoggerInterface $logger;
     private OpenApiYamlReaderInterface $reader;
+    private ?OpenApiRouteValidatorInterface $validator;
     private IRouteMatcher $routeMatcher;
 
-    public function __construct(LoggerInterface $logger) {
+    public function __construct(LoggerInterface $logger, OpenApiRouteValidatorInterface $validator=null) {
         $this->logger                               = $logger;
+        $this->validator                            = $validator;
         $this->reader                               = new OpenApiYamlReader($logger);
         $this->routeMatcher                         = new RouteMatcher($logger);
     }
@@ -26,57 +28,33 @@ class OpenApiRouter implements OpenApiRouterInterface {
      */
     public function getRoute(string $yamlFileName, HttpServerRequestInterface $request) :?HttpRoute {
         //
-        $this->reader->load($yamlFileName);
+        $yaml                                       = $this->reader->load($yamlFileName);
         //
         $routeSearch                                = new RouteSearch(
             $request->getUri()->getPath(),
             $request->getMethod(),
         );
-        foreach ($this->reader->getPaths() as $uri => $methods) {
+        foreach ($yaml->getPaths() as $uri => $methods) {
             foreach ($methods as $method => $properties) {
                 $route                              = new Route(
                     $uri,
-                    $properties["operationId"],
-                    [$method]
+                    $method
                 );
-                if ($this->routeMatcher->routeMatch($routeSearch, $route, false)) {
-                    if ($this->parameterMatches($properties["parameters"] ?? [], $route->getUri(), $request)) {
-                        return new HttpRoute(
-                            $uri,
-                            $method
-                        );
+                if ($this->routeMatcher->routeMatch($routeSearch, $route)) {
+                    //
+                    // optional validation
+                    //
+                    if ($this->validator) {
+                        $this->validator->validateRoute($yamlFileName, $uri, $method, $request);
                     }
+                    return new HttpRoute(
+                        $uri,
+                        $method,
+                        $properties["operationId"]
+                    );
                 }
             }
         }
         return null;
-    }
-
-    /**
-     * @param array $properties
-     * @param string $path
-     * @param HttpServerRequestInterface $request
-     * @return bool
-     */
-    private function parameterMatches(array $properties, string $path, HttpServerRequestInterface $request) : bool {
-        foreach ($properties as $property) {
-            if ($property["required"] ?? false) {
-                $propertyIn                         = $property["in"] ?? "-";
-                $propertyName                       = $property["name"] ?? "-";
-                $propertyValue                      = null;
-                switch ($propertyIn) {
-                    case "path":
-                        $propertyValue              = $request->getPathParam($path, $propertyName);
-                        break;
-                    case "query":
-                        $propertyValue              = $request->getQueryParam($propertyName);
-                        break;
-                }
-                if (!$propertyValue) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 }

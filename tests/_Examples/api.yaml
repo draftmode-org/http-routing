@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: Title
+  description: Title
+  version: 1.0.0
+servers:
+  - url: '/api/'
+tags:
+  - name: Payment
+paths:
+  "/payment":
+    post:
+      tags:
+        - Payment
+      summary:
+        create new payment
+      operationId: payment_create
+      requestBody:
+        $ref: "#/components/requestBodies/PaymentPost"
+      responses:
+        201:
+          $ref: "#/components/responses/201"
+        400:
+          $ref: "#/components/responses/400"
+  "/payment/{paymentId}":
+    parameters:
+      - in: path
+        required: true
+        name: paymentId
+        schema:
+          $ref: "#/components/schemas/paymentId"
+      - in: query
+        required: false
+        name: "id"
+        schema:
+          $ref: "#/components/schemas/paymentId"
+    patch:
+      tags:
+        - Payment
+      summary:
+        patch new payment
+      operationId: payment_patch
+      requestBody:
+        $ref: "#/components/requestBodies/PaymentPost"
+      responses:
+        201:
+          $ref: "#/components/responses/201"
+        400:
+          $ref: "#/components/responses/400"
+    get:
+      tags:
+        - Payment
+      summary:
+        get payment detail by id
+      operationId: payment_getView
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: number
+      responses:
+        200:
+          $ref: '#/components/responses/paymentGetView'
+        400:
+          description: 'returns a list of vehicles'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/paymentId'
+    post:
+      tags:
+        - Payment
+      summary:
+        update payment
+      operationId: payment_update
+      requestBody:
+        $ref: "#/components/requestBodies/PaymentPost"
+      responses:
+        200:
+          $ref: "#/components/responses/200"
+  "/payment/{paymentId}/items":
+    get:
+      tags:
+        - Payment
+      summary:
+        get payment items by payment id
+      operationId: payment_getItems
+      parameters:
+        - in: path
+          name: paymentId
+          schema:
+            $ref: "#/components/schemas/paymentId"
+      responses:
+        200:
+          $ref: "#/components/responses/200"
+components:
+  requestBodies:
+    PaymentPost:
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - date
+            properties:
+              date:
+                $ref: "#/components/schemas/date"
+              customer:
+                $ref: "#/components/schemas/customer"
+  responses:
+    paymentGetView:
+      description: "payment entity"
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                $ref: "#/components/schemas/paymentId"
+    200:
+      description: successful
+    201:
+      description: created successful
+    400:
+      description: invalid argument(s)
+  schemas:
+    paymentId:
+      type: string
+      maxLength: 5
+    customer:
+      type: object
+      properties:
+        firstName:
+          $ref: "#/components/schemas/firstName"
+    firstName:
+      type: string
+      maxLength: 10
+    date:
+      type: string
+      format: date
+      required: true
