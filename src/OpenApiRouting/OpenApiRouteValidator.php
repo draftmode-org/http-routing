@@ -3,58 +3,70 @@ namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Terrazza\Component\Http\Request\HttpServerRequestInterface;
+use Terrazza\Component\HttpRouting\HttpRoute;
+use Terrazza\Component\HttpRouting\HttpRoutingValidatorInterface;
 
-class OpenApiRouteValidator implements OpenApiRouteValidatorInterface {
+class OpenApiRouteValidator implements HttpRoutingValidatorInterface {
+    private string $routingFileName;
     private LoggerInterface $logger;
-    private OpenApiYamlValidatorInterface $validator;
-    private OpenApiYamlReader $reader;
+    private string $defaultContentType;
 
-    public function __construct(LoggerInterface $logger) {
+    public function __construct(string $routingFileName, LoggerInterface $logger, ?string $defaultContentType=null) {
+        $this->routingFileName                      = $routingFileName;
         $this->logger                               = $logger;
-        $this->reader                               = new OpenApiYamlReader($logger);
-        $this->validator                            = new OpenApiYamlValidator($logger);
+        $this->defaultContentType                   = $defaultContentType ?? "application/json";
     }
 
     /**
-     * @param string $yamlFileName
-     * @param string $uri
-     * @param string $method
+     * @param HttpRoute $route
      * @param HttpServerRequestInterface $request
      */
-    public function validateRoute(string $yamlFileName, string $uri, string $method, HttpServerRequestInterface $request) {
+    public function validate(HttpRoute $route, HttpServerRequestInterface $request) : void {
         //
-        $yaml                                       = $this->reader->load($yamlFileName);
+        $reader                                     = new OpenApiYamlReader($this->logger);
+        $validator                                  = new OpenApiYamlValidator($this->logger);
         //
-        // validate uri parameter
+        $yaml                                       = $reader->load($this->routingFileName);
+        $uri                                        = $route->getRoutePath();
+        $method                                     = $route->getRouteMethod();
         //
-        $queryParams                                = $yaml->getParameterProperties($uri, $method, "path");
-        $this->validator->validateSchemas($request->getPathParams($uri), $queryParams);
+        // validate pathParam
         //
-        // validate query parameter
+        if ($params = $yaml->getParameterProperties($uri, $method, "path")) {
+            $validator->validate("pathParam", $request->getPathParams($uri), $params);
+        }
+        //
+        // validate queryParam
         //
         if ($params = $yaml->getParameterProperties($uri, $method, "query")) {
-            $this->validator->validateSchemas($request->getQueryParams(), $params);
+            $validator->validate("queryParam", $request->getQueryParams(), $params);
         }
-        //
-        // validate cookie parameter
-        //
-        if ($params = $yaml->getParameterProperties($uri, $method, "cookies")) {
-            $this->validator->validateSchemas($request->getCookieParams(), $params);
+        /*
+         * actually not implemented, knowledge
+         *
+        if ($params = $yaml->getParameterProperties($uri, $method, "header")) {
+            $validator->validate("headerParam", $request->getCookieParams(), $params);
         }
+        */
+        /*
+         * actually not implemented, knowledge
+         *
+        if ($params = $yaml->getParameterProperties($uri, $method, "cookie")) {
+            $validator->validate("cookieParam", $request->getCookieParams(), $params);
+        }
+        */
         //
         // validate requestBody
         //
-        $requestContentType                         = $request->getHeaderLine("Content-Type");
-        $requestBody                                = $this->getRequestBodyEncoded($requestContentType, $request->getBody()->getContents());
-        $requestParams                              = $yaml->getRequestBodyProperties($uri, $method, $requestContentType);
-        if ($requestParams) {
-            $this->validator->validateSchema($requestBody, $requestParams);
-        } else {
-            if ($requestBody) {
-                throw new RuntimeException("schema $uri:$method/requestBody/content/$requestContentType not found");
+        if ($requestBodies = $yaml->getRequestBodyContents($uri, $method)) {
+            $requestContentType                     = $request->getHeaderLine("Content-Type");
+            if (strlen($requestContentType) === 0) {
+                $requestContentType                 = $this->defaultContentType;
             }
+            $requestParams                          = $yaml->getRequestBodyContentByContentType($requestBodies, $requestContentType);
+            $requestBody                            = $this->getRequestBodyEncoded($requestContentType, $request->getBody()->getContents());
+            $validator->validate("requestBody", $requestBody, $requestParams);
         }
     }
 
@@ -70,7 +82,7 @@ class OpenApiRouteValidator implements OpenApiRouteValidatorInterface {
                 if (json_last_error() === JSON_ERROR_NONE) {
                     return $contentEncoded;
                 }
-                throw new InvalidArgumentException("requestBody content could not be encoded as $contentType");
+                throw new InvalidArgumentException("body content could not be encoded as json");
             }
         }
         return null;

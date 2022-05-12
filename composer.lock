@@ -282,12 +282,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/terrazza/http.git",
-                "reference": "e5828dcd57a93d07f1fd707a5fb48e48a6a696a9"
+                "reference": "f99d531af3bcedffee9ce0fff358dcb559e3f426"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/terrazza/http/zipball/e5828dcd57a93d07f1fd707a5fb48e48a6a696a9",
-                "reference": "e5828dcd57a93d07f1fd707a5fb48e48a6a696a9",
+                "url": "https://api.github.com/repos/terrazza/http/zipball/f99d531af3bcedffee9ce0fff358dcb559e3f426",
+                "reference": "f99d531af3bcedffee9ce0fff358dcb559e3f426",
                 "shasum": ""
             },
             "require": {
@@ -325,7 +325,7 @@
                 "issues": "https://github.com/terrazza/http/issues",
                 "source": "https://github.com/terrazza/http/tree/main"
             },
-            "time": "2022-05-11T22:25:48+00:00"
+            "time": "2022-05-12T21:30:57+00:00"
         },
         {
             "name": "terrazza/routing",
@@ -378,12 +378,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/terrazza/validator.git",
-                "reference": "509371902d249b8e98f28e143edef0bbd67cab9c"
+                "reference": "22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/terrazza/validator/zipball/509371902d249b8e98f28e143edef0bbd67cab9c",
-                "reference": "509371902d249b8e98f28e143edef0bbd67cab9c",
+                "url": "https://api.github.com/repos/terrazza/validator/zipball/22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7",
+                "reference": "22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7",
                 "shasum": ""
             },
             "require": {
@@ -419,7 +419,7 @@
                 "issues": "https://github.com/terrazza/validator/issues",
                 "source": "https://github.com/terrazza/validator/tree/main"
             },
-            "time": "2022-05-11T21:40:35+00:00"
+            "time": "2022-05-12T20:26:47+00:00"
         }
     ],
     "packages-dev": [
@@ -4064,12 +4064,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/vimeo/psalm.git",
-                "reference": "90d2b3cf5e897da71f8ca8fef7eee124d68ad3a3"
+                "reference": "b37da4ae1f9f61735ac9efe8345e75607c40305e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vimeo/psalm/zipball/90d2b3cf5e897da71f8ca8fef7eee124d68ad3a3",
-                "reference": "90d2b3cf5e897da71f8ca8fef7eee124d68ad3a3",
+                "url": "https://api.github.com/repos/vimeo/psalm/zipball/b37da4ae1f9f61735ac9efe8345e75607c40305e",
+                "reference": "b37da4ae1f9f61735ac9efe8345e75607c40305e",
                 "shasum": ""
             },
             "require": {
@@ -4164,7 +4164,7 @@
                 "issues": "https://github.com/vimeo/psalm/issues",
                 "source": "https://github.com/vimeo/psalm/tree/4.x"
             },
-            "time": "2022-05-08T20:43:51+00:00"
+            "time": "2022-05-12T20:58:24+00:00"
         },
         {
             "name": "webmozart/assert",

@@ -1,6 +1,7 @@
 <?php
 namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
@@ -100,14 +101,13 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @param string $validContentType
      * @return array|null
      */
-    public function getRequestBodyProperties(string $routePath, string $routeMethod, string $validContentType) :?array {
-        $this->logger->debug("get properties $routePath:$routeMethod/$validContentType");
+    public function getRequestBodyContents(string $routePath, string $routeMethod) :?array {
+        $this->logger->debug("get properties $routePath:$routeMethod");
         $properties                                 = $this->getPath($routePath, $routeMethod);
         if (!array_key_exists("requestBody", $properties)) {
             return null;
         }
         $requestBodyProperties                      = $properties["requestBody"];
-        $contentRef                                 = $routePath. " for method $routeMethod";
 
         if (array_key_exists("\$ref", $requestBodyProperties)) {
             $contentRef                             = $requestBodyProperties["\$ref"];
@@ -116,10 +116,60 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
 
         $contentNode                                = "content";
         if (!array_key_exists($contentNode, $requestBodyProperties)) {
-            throw new RuntimeException("node $contentNode for $contentRef does not exist");
+            return null;
         }
-        $contentRef                                 .= "/$contentNode";
-        $requestBodyContent                         = $requestBodyProperties[$contentNode];
+        return $requestBodyProperties[$contentNode];
+    }
+
+    /**
+     * @param array $content
+     * @param string $contentType
+     * @return array
+     */
+    public function getRequestBodyContentByContentType(array $content, string $contentType) : array {
+        if (!array_key_exists($contentType, $content)) {
+            throw new InvalidArgumentException("requestBody content-type not accepted, given ".$contentType);
+        }
+        $content                                    = $content[$contentType];
+        $schemaNode                                 = "schema";
+        if (!array_key_exists($schemaNode, $content)) {
+            throw new RuntimeException("node $schemaNode for $contentType does not exist");
+        }
+        $properties                                 = $this->buildContentProperties("requestBody", $content[$schemaNode]);
+        return $properties["properties"];
+    }
+
+    /**
+     * @param string $propertyName
+     * @param array $properties
+     * @param string|null $parentName
+     * @return array
+     */
+    private function buildContentProperties(string $propertyName, array $properties, ?string $parentName=null) : array {
+        $propertyFullName                           = $parentName ? $parentName . "." . $propertyName : $propertyName;
+        $propertyRequired                           = $properties["required"] ?? null;
+        if (array_key_exists("\$ref", $properties)) {
+            $properties                             = $this->getContentByRef($properties["\$ref"]);
+        }
+        if (!array_key_exists("type", $properties)) {
+            throw new RuntimeException("node type for $propertyFullName does not exist");
+        }
+        if (array_key_exists("properties", $properties)) {
+            $childSchemas                           = [];
+            foreach ($properties["properties"] as $childName => $childProperties) {
+                $childSchema                        = $this->buildContentProperties(
+                    $childName, $childProperties, $propertyFullName);
+                if (is_array($propertyRequired) &&
+                    in_array($childName, $propertyRequired)) {
+                    $childSchema["required"]        = true;
+                }
+                $childSchemas[$childName]           = $childSchema;
+            }
+            $properties["properties"]               = $childSchemas;
+        }
+        return $properties;
+    }
+/*
 
         if (!array_key_exists($validContentType, $requestBodyContent)) {
             throw new RuntimeException("node $validContentType for $contentRef does not exist");
@@ -132,7 +182,7 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             throw new RuntimeException("node $schemaNode for $contentRef does not exist");
         }
         return $this->buildParameterProperties("", $requestBodyContentType[$schemaNode]);
-    }
+ */
 
     /**
      * @param array $uriParameters

@@ -3,14 +3,9 @@ namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
 interface OpenApiYamlValidatorInterface {
     /**
+     * @param string $schemaName
      * @param $content
      * @param array $properties
      */
-    public function validateSchemas($content, array $properties) : void;
-
-    /**
-     * @param $content
-     * @param array $properties
-     */
-    public function validateSchema($content, array $properties) : void;
+    public function validate(string $schemaName, $content, array $properties) : void;
 }

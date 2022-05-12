@@ -14,37 +14,25 @@ class OpenApiYamlValidator implements OpenApiYamlValidatorInterface {
         $this->logger                               = $logger;
     }
 
-    /**
-     * @param $content
-     * @param array $properties
-     */
-    public function validateSchemas($content, array $properties) : void {
-        if ($contentSchema = $this->buildValueSchemas($properties)) {
-            $this->validator->validate($content, $contentSchema);
-        }
-    }
-
-    /**
-     * @param $content
-     * @param array $properties
-     */
-    public function validateSchema($content, array $properties) : void {
-        if ($contentSchema = $this->createValidatorSchema("", $properties)) {
+    public function validate(string $schemaName, $content, array $properties) : void {
+        if ($propertySchemas = $this->buildValueSchemas($properties)) {
+            $contentSchema                          = (new ObjectValueSchema($schemaName, "object"))
+                ->setChildSchemas(...$propertySchemas);
             $this->validator->validate($content, $contentSchema);
         }
     }
 
     /**
      * @param array $properties
-     * @return ObjectValueSchema|null
+     * @return ObjectValueSchema[]|null
      */
-    private function buildValueSchemas(array $properties) :?ObjectValueSchema {
+    private function buildValueSchemas(array $properties) :?array {
         if (count($properties)) {
-            $schema                                 = [];
+            $schemas                                = [];
             foreach ($properties as $parameterName => $parameterProperties) {
-                $schema[]                           = $this->createValidatorSchema($parameterName, $parameterProperties);
+                $schemas[]                          = $this->createValidatorSchema($parameterName, $parameterProperties);
             }
-            return (new ObjectValueSchema("", "object"))->setChildSchemas(...$schema);
+            return $schemas;
         } else {
             return null;
         }

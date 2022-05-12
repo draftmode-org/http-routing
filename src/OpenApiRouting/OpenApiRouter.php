@@ -3,32 +3,32 @@ namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 use Psr\Log\LoggerInterface;
 use Terrazza\Component\Http\Request\HttpServerRequestInterface;
 use Terrazza\Component\HttpRouting\HttpRoute;
+use Terrazza\Component\HttpRouting\HttpRoutingInterface;
 use Terrazza\Component\Routing\IRouteMatcher;
 use Terrazza\Component\Routing\Route;
 use Terrazza\Component\Routing\RouteMatcher;
 use Terrazza\Component\Routing\RouteSearch;
 
-class OpenApiRouter implements OpenApiRouterInterface {
+class OpenApiRouter implements HttpRoutingInterface {
     private LoggerInterface $logger;
+    private string $routingFileName;
     private OpenApiYamlReaderInterface $reader;
-    private ?OpenApiRouteValidatorInterface $validator;
     private IRouteMatcher $routeMatcher;
 
-    public function __construct(LoggerInterface $logger, OpenApiRouteValidatorInterface $validator=null) {
+    public function __construct(string $routingFileName, LoggerInterface $logger) {
         $this->logger                               = $logger;
-        $this->validator                            = $validator;
+        $this->routingFileName                      = $routingFileName;
         $this->reader                               = new OpenApiYamlReader($logger);
         $this->routeMatcher                         = new RouteMatcher($logger);
     }
 
     /**
-     * @param string $yamlFileName
      * @param HttpServerRequestInterface $request
      * @return HttpRoute|null
      */
-    public function getRoute(string $yamlFileName, HttpServerRequestInterface $request) :?HttpRoute {
+    public function getRoute(HttpServerRequestInterface $request) :?HttpRoute {
         //
-        $yaml                                       = $this->reader->load($yamlFileName);
+        $yaml                                       = $this->reader->load($this->routingFileName);
         //
         $routeSearch                                = new RouteSearch(
             $request->getUri()->getPath(),
@@ -41,12 +41,6 @@ class OpenApiRouter implements OpenApiRouterInterface {
                     $method
                 );
                 if ($this->routeMatcher->routeMatch($routeSearch, $route)) {
-                    //
-                    // optional validation
-                    //
-                    if ($this->validator) {
-                        $this->validator->validateRoute($yamlFileName, $uri, $method, $request);
-                    }
                     return new HttpRoute(
                         $uri,
                         $method,

@@ -8,10 +8,10 @@ servers:
 tags:
   - name: Payment
 paths:
-  "/payment":
+  "/payments":
     post:
       tags:
-        - Payment
+        - Payments
       summary:
         create new payment
       operationId: payment_create
@@ -22,7 +22,38 @@ paths:
           $ref: "#/components/responses/201"
         400:
           $ref: "#/components/responses/400"
-  "/payment/{paymentId}":
+    get:
+      parameters:
+        - in: query
+          required: true
+          name: "paymentFrom"
+          schema:
+            $ref: "#/components/schemas/paymentFrom"
+        - in: cookie
+          required: false
+          name: "user-name"
+          schema:
+            $ref: "#/components/schemas/userName"
+        - in: header
+          required: false
+          name: "user-name"
+          schema:
+            $ref: "#/components/schemas/userName"
+      tags:
+        - Payments
+      summary:
+        list payments
+      operationId: payment_list
+      responses:
+        200:
+          description: list of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/paymentId'
+  "/payments/{paymentId}":
     parameters:
       - in: path
         required: true
@@ -53,12 +84,6 @@ paths:
       summary:
         get payment detail by id
       operationId: payment_getView
-      parameters:
-        - in: query
-          name: name
-          required: true
-          schema:
-            type: number
       responses:
         200:
           $ref: '#/components/responses/paymentGetView'
@@ -127,6 +152,12 @@ components:
     400:
       description: invalid argument(s)
   schemas:
+    userName:
+      type: string
+      minLength: 10
+    paymentFrom:
+      type: string
+      format: date
     paymentId:
       type: string
       maxLength: 5
@@ -141,4 +172,3 @@ components:
     date:
       type: string
       format: date
-      required: true
