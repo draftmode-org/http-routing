@@ -2,12 +2,12 @@
 
 namespace Terrazza\Component\HttpRouting\OpenApiRouting;
 
-interface OpenApiYamlReaderInterface {
+interface OpenApiReaderInterface {
     /**
      * @param string $yamlFileName
-     * @return OpenApiYamlReaderInterface
+     * @return OpenApiReaderInterface
      */
-    public function load(string $yamlFileName) : OpenApiYamlReaderInterface;
+    public function load(string $yamlFileName) : OpenApiReaderInterface;
 
     /**
      * @return array
@@ -40,5 +40,5 @@ interface OpenApiYamlReaderInterface {
      * @param string $contentType
      * @return array
      */
-    public function getRequestBodyContentByContentType(array $content, string $contentType) : array;
+    public function getRequestBodyProperties(array $content, string $contentType) : array;
 }

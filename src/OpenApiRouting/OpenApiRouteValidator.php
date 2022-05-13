@@ -24,7 +24,7 @@ class OpenApiRouteValidator implements HttpRoutingValidatorInterface {
      */
     public function validate(HttpRoute $route, HttpServerRequestInterface $request) : void {
         //
-        $reader                                     = new OpenApiYamlReader($this->logger);
+        $reader                                     = new OpenApiReader($this->logger);
         $validator                                  = new OpenApiYamlValidator($this->logger);
         //
         $yaml                                       = $reader->load($this->routingFileName);
@@ -64,7 +64,7 @@ class OpenApiRouteValidator implements HttpRoutingValidatorInterface {
             if (strlen($requestContentType) === 0) {
                 $requestContentType                 = $this->defaultContentType;
             }
-            $requestParams                          = $yaml->getRequestBodyContentByContentType($requestBodies, $requestContentType);
+            $requestParams                          = $yaml->getRequestBodyProperties($requestBodies, $requestContentType);
             $requestBody                            = $this->getRequestBodyEncoded($requestContentType, $request->getBody()->getContents());
             $validator->validate("requestBody", $requestBody, $requestParams);
         }

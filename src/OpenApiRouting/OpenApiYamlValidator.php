@@ -15,26 +15,8 @@ class OpenApiYamlValidator implements OpenApiYamlValidatorInterface {
     }
 
     public function validate(string $schemaName, $content, array $properties) : void {
-        if ($propertySchemas = $this->buildValueSchemas($properties)) {
-            $contentSchema                          = (new ObjectValueSchema($schemaName, "object"))
-                ->setChildSchemas(...$propertySchemas);
+        if ($contentSchema = $this->createValidatorSchema($schemaName, $properties)) {
             $this->validator->validate($content, $contentSchema);
-        }
-    }
-
-    /**
-     * @param array $properties
-     * @return ObjectValueSchema[]|null
-     */
-    private function buildValueSchemas(array $properties) :?array {
-        if (count($properties)) {
-            $schemas                                = [];
-            foreach ($properties as $parameterName => $parameterProperties) {
-                $schemas[]                          = $this->createValidatorSchema($parameterName, $parameterProperties);
-            }
-            return $schemas;
-        } else {
-            return null;
         }
     }
 

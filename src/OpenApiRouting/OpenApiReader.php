@@ -5,24 +5,31 @@ use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
-class OpenApiYamlReader implements OpenApiYamlReaderInterface {
+class OpenApiReader implements OpenApiReaderInterface {
     private LoggerInterface $logger;
     private ?array $content=null;
     private ?array $paths=null;
+    CONST multipleTypes = ["oneOf"];
+
     public function __construct(LoggerInterface $logger) {
         $this->logger                               = $logger;
     }
 
     /**
      * @param string $yamlFileName
-     * @return OpenApiYamlReaderInterface
+     * @return OpenApiReaderInterface
      */
-    public function load(string $yamlFileName) : OpenApiYamlReaderInterface {
+    public function load(string $yamlFileName) : OpenApiReaderInterface {
         if (is_null($this->content)) {
             if (!file_exists($yamlFileName)) {
                 throw new RuntimeException("yaml.file $yamlFileName does not exist");
             }
-            $this->content                          = yaml_parse_file($yamlFileName);
+            $content                                = yaml_parse_file($yamlFileName);
+            if (is_array($content)) {
+                $this->content                      = $content;
+            } else {
+                throw new RuntimeException("yaml.file $yamlFileName could no be parsed");
+            }
         }
         return $this;
     }
@@ -49,6 +56,7 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
                     if (!array_key_exists($uri, $paths)) {
                         $paths[$uri]                = [];
                     }
+/* TODO no need to merge it that deep */
                     $properties["parameters"]       = $this->mergeParameters($uriParameters, $properties["parameters"] ?? []);
                     $paths[$uri][$method]           = $properties;
                 }
@@ -67,14 +75,20 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
         $content                                = $this->content ?? [];
         $refs                                   = explode("/", $ref);
         array_shift($refs);
-        $node                                   = [];
+        $nodes                                  = [];
         foreach ($refs as $refKey) {
-            $node[]                             = $refKey;
+            $nodes[]                            = $refKey;
             if (array_key_exists($refKey, $content)) {
-                $content                            = $content[$refKey];
+                $content                        = $content[$refKey];
             } else {
-                throw new RuntimeException("node ".join("/", $node). " does not exist");
+                throw new RuntimeException("node ".join("/", $nodes). " does not exist");
             }
+        }
+        if (count($nodes) === 0) {
+            throw new RuntimeException("node $ref does not exist");
+        }
+        if (is_null($content)) {
+            throw new RuntimeException("node ".join("/", $nodes). " exists, but does not have any content");
         }
         return $content;
     }
@@ -86,11 +100,16 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @return array|null
      */
     public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) :?array {
-        $this->logger->debug("get properties $routePath:$routeMethod/$parametersType");
+        $this->logger->debug("get properties for $routePath:$routeMethod");
         if ($properties = $this->getPath($routePath, $routeMethod)) {
+            $this->logger->debug("...properties for $parametersType found");
             if (array_key_exists($parametersType, $properties["parameters"])) {
-                return $properties["parameters"][$parametersType];
+                return ["type" => "object", "properties" => $properties["parameters"][$parametersType]];
+            } else {
+                $this->logger->debug("...attribute parameters in properties not found");
             }
+        } else {
+            $this->logger->debug("...properties for $parametersType found");
         }
         return null;
     }
@@ -98,12 +117,14 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
     /**
      * @param string $routePath
      * @param string $routeMethod
-     * @param string $validContentType
      * @return array|null
      */
     public function getRequestBodyContents(string $routePath, string $routeMethod) :?array {
-        $this->logger->debug("get properties $routePath:$routeMethod");
+        $this->logger->debug("get requestBody content for $routePath:$routeMethod");
         $properties                                 = $this->getPath($routePath, $routeMethod);
+        if (!is_array($properties)) {
+            throw new RuntimeException("path for $routePath:$routeMethod not found");
+        }
         if (!array_key_exists("requestBody", $properties)) {
             return null;
         }
@@ -113,11 +134,11 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             $contentRef                             = $requestBodyProperties["\$ref"];
             $requestBodyProperties                  = $this->getContentByRef($contentRef);
         }
-
         $contentNode                                = "content";
         if (!array_key_exists($contentNode, $requestBodyProperties)) {
-            return null;
+            throw new RuntimeException("node content for requestBody $routePath:$routeMethod does not exist");
         }
+        $this->logger->debug("requestBody:content found");
         return $requestBodyProperties[$contentNode];
     }
 
@@ -126,17 +147,17 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @param string $contentType
      * @return array
      */
-    public function getRequestBodyContentByContentType(array $content, string $contentType) : array {
+    public function getRequestBodyProperties(array $content, string $contentType) : array {
         if (!array_key_exists($contentType, $content)) {
-            throw new InvalidArgumentException("requestBody content-type not accepted, given ".$contentType);
+            throw new InvalidArgumentException("requestBody Content-Type not accepted, given ".$contentType);
         }
         $content                                    = $content[$contentType];
         $schemaNode                                 = "schema";
-        if (!array_key_exists($schemaNode, $content)) {
-            throw new RuntimeException("node $schemaNode for $contentType does not exist");
+        if (!is_array($content) ||
+            !array_key_exists($schemaNode, $content)) {
+            throw new RuntimeException("node $schemaNode for $contentType does not exist or is not an array");
         }
-        $properties                                 = $this->buildContentProperties("requestBody", $content[$schemaNode]);
-        return $properties["properties"];
+        return $this->buildContentProperties("requestBody", $content[$schemaNode]);
     }
 
     /**
@@ -146,43 +167,47 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
      * @return array
      */
     private function buildContentProperties(string $propertyName, array $properties, ?string $parentName=null) : array {
-        $propertyFullName                           = $parentName ? $parentName . "." . $propertyName : $propertyName;
+        $this->logger->debug("buildContentProperties for $propertyName", $properties);
         $propertyRequired                           = $properties["required"] ?? null;
-        if (array_key_exists("\$ref", $properties)) {
+        while (array_key_exists("\$ref", $properties)) {
+            $propertyRef                            = $properties["\$ref"];
+            $this->logger->debug("...load property ref $propertyRef");
             $properties                             = $this->getContentByRef($properties["\$ref"]);
         }
-        if (!array_key_exists("type", $properties)) {
+        $propertyFullName                           = $parentName ? $parentName . "." . $propertyName : $propertyName;
+        foreach (self::multipleTypes as $multipleType) {
+            if (array_key_exists($multipleType, $properties)) {
+                $properties["type"]                 = $multipleType;
+                $properties["properties"]           = $properties[$multipleType];
+            }
+        }
+        if (array_key_exists("type", $properties)) {
+             if (array_key_exists("properties", $properties)) {
+                $childSchemas = [];
+                foreach ($properties["properties"] as $childName => $childProperties) {
+                    $childSchema = $this->buildContentProperties(
+                        $childName, $childProperties, $propertyFullName);
+                    if (is_array($propertyRequired) &&
+                        in_array($childName, $propertyRequired)) {
+                        $childSchema["required"] = true;
+                    }
+                    $childSchemas[$childName] = $childSchema;
+                }
+                $properties["properties"] = $childSchemas;
+                unset($properties["required"]);
+            } else {
+                if ($propertyRequired === true) {
+                    $properties["required"] = true;
+                }
+            }
+            foreach (self::multipleTypes as $multipleType) {
+                unset($properties[$multipleType]);
+            }
+            return $properties;
+        } else {
             throw new RuntimeException("node type for $propertyFullName does not exist");
         }
-        if (array_key_exists("properties", $properties)) {
-            $childSchemas                           = [];
-            foreach ($properties["properties"] as $childName => $childProperties) {
-                $childSchema                        = $this->buildContentProperties(
-                    $childName, $childProperties, $propertyFullName);
-                if (is_array($propertyRequired) &&
-                    in_array($childName, $propertyRequired)) {
-                    $childSchema["required"]        = true;
-                }
-                $childSchemas[$childName]           = $childSchema;
-            }
-            $properties["properties"]               = $childSchemas;
-        }
-        return $properties;
     }
-/*
-
-        if (!array_key_exists($validContentType, $requestBodyContent)) {
-            throw new RuntimeException("node $validContentType for $contentRef does not exist");
-        }
-        $contentRef                                 .= "/".$validContentType;
-        $requestBodyContentType                     = $requestBodyContent[$validContentType];
-
-        $schemaNode                                 = "schema";
-        if (!array_key_exists($schemaNode, $requestBodyContentType)) {
-            throw new RuntimeException("node $schemaNode for $contentRef does not exist");
-        }
-        return $this->buildParameterProperties("", $requestBodyContentType[$schemaNode]);
- */
 
     /**
      * @param array $uriParameters
@@ -206,11 +231,10 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             if (array_key_exists("required", $parameter)) {
                 $parameterSchema["required"]        = $parameter["required"];
             }
-            $response[$type][$name]                 = $this->buildParameterProperties($name, $parameterSchema);
+            $response[$type][$name]                 = $this->buildContentProperties($name, $parameterSchema);
         }
         return $response;
     }
-
 
     /**
      * @param string $path
@@ -225,34 +249,5 @@ class OpenApiYamlReader implements OpenApiYamlReaderInterface {
             }
         }
         return null;
-    }
-
-    /**
-     * @param string $propertyName
-     * @param array $properties
-     * @param string|null $parentName
-     * @return array
-     */
-    private function buildParameterProperties(string $propertyName, array $properties, string $parentName=null) : array {
-        $propertyFullName                           = $parentName ? $parentName . "." . $propertyName : $propertyName;
-        $propertyRequired                           = (array_key_exists("required", $properties) && $properties["required"]);
-        if (array_key_exists("\$ref", $properties)) {
-            $properties                             = $this->getContentByRef($properties["\$ref"]);
-        }
-        if (!array_key_exists("type", $properties)) {
-            throw new RuntimeException("node type for $propertyFullName does not exist");
-        }
-        if (!array_key_exists("required", $properties) && $propertyRequired) {
-            $properties["required"]                 = $propertyRequired;
-        }
-        if (array_key_exists("properties", $properties)) {
-            $childSchemas                           = [];
-            foreach ($properties["properties"] as $childName => $childProperties) {
-                $childSchemas[$childName]           = $this->buildParameterProperties(
-                    $childName, $childProperties, $propertyFullName);
-            }
-            $properties["properties"]               = $childSchemas;
-        }
-        return $properties;
     }
 }

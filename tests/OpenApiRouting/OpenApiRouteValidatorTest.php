@@ -1,5 +1,6 @@
 <?php
 namespace Terrazza\Component\HttpRouting\Tests\OpenApiRouting;
+use DateTime;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Terrazza\Component\Http\Message\Uri\Uri;
@@ -12,7 +13,10 @@ class OpenApiRouteValidatorTest extends TestCase {
     CONST routingFileName   = "tests/_Examples/api.yaml";
     CONST baseUri           = "https://test.terrazza.io";
 
-    function testSuccessful() {
+    /*
+     * GET PAYMENT tests
+     */
+    function testGetPaymentSuccessful() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments/12345";
@@ -22,7 +26,7 @@ class OpenApiRouteValidatorTest extends TestCase {
         $this->assertTrue(true);
     }
 
-    function testFailurePathParam() {
+    function testGetPaymentFailurePathParam() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments/1234509";
@@ -32,7 +36,49 @@ class OpenApiRouteValidatorTest extends TestCase {
         $validator->validate($httpRoute, $serverRequest);
     }
 
-    function testFailureQueryParam() {
+    /*
+     * GET PAYMENTS tests
+     */
+    function testGetPaymentsSuccessful() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/payments";
+        $serverRequest      = (new HttpServerRequest("GET", new Uri(self::baseUri.$path)))
+            ->withQueryParams(["paymentFrom" => (new DateTime)->format("Y-m-d")]);
+        $httpRoute          = new HttpRoute("/payments", "get", "requestHandlerClass");
+        $validator->validate($httpRoute, $serverRequest);
+        $this->assertTrue(true);
+    }
+
+    function testGetPaymentsSuccessfulEnum() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/payments";
+        $serverRequest      = (new HttpServerRequest("GET", new Uri(self::baseUri.$path)))
+            ->withQueryParams([
+                "paymentFrom" => (new DateTime)->format("Y-m-d"),
+                "paymentState" => 1
+            ]);
+        $httpRoute          = new HttpRoute("/payments", "get", "requestHandlerClass");
+        $validator->validate($httpRoute, $serverRequest);
+        $this->assertTrue(true);
+    }
+
+    function testGetPaymentsFailureEnum() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/payments";
+        $serverRequest      = (new HttpServerRequest("GET", new Uri(self::baseUri.$path)))
+            ->withQueryParams([
+                "paymentFrom" => (new DateTime)->format("Y-m-d"),
+                "paymentState" => 12
+            ]);
+        $httpRoute          = new HttpRoute("/payments", "get", "requestHandlerClass");
+        $this->expectException(InvalidArgumentException::class);
+        $validator->validate($httpRoute, $serverRequest);
+    }
+
+    function testGetPaymentsFailureQueryParamMissing() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments";
@@ -43,18 +89,42 @@ class OpenApiRouteValidatorTest extends TestCase {
         $validator->validate($httpRoute, $serverRequest);
     }
 
-    function testRequestBodySuccessful() {
+    /*
+     * POST PAYMENT tests
+     */
+    function testPostSuccessful() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments";
         $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))
-            ->withBody(json_encode(["date" => "2022-01-01"]));
+            ->withBody(json_encode(["paymentDate" => "2022-01-01"]));
         $httpRoute          = new HttpRoute("/payments", "post", "requestHandlerClass");
         $validator->validate($httpRoute, $serverRequest);
         $this->assertTrue(true);
     }
 
-    function testRequestBodyFailureNoContent() {
+    function testPostSuccessfulOneOf() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/animals";
+        $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))
+            ->withBody(json_encode(["dogName" => "myName"]));
+        $httpRoute          = new HttpRoute("/animals", "post", "requestHandlerClass");
+        $validator->validate($httpRoute, $serverRequest);
+        $this->assertTrue(true);
+    }
+
+    function testPostFailureOneOfDoesNotMatchAny() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/animals";
+        $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))
+            ->withBody(json_encode(["name" => "myName"]));
+        $httpRoute          = new HttpRoute("/animals", "post", "requestHandlerClass");
+        $validator->validate($httpRoute, $serverRequest);
+    }
+
+    function testPostFailureNoContent() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments";
@@ -64,14 +134,26 @@ class OpenApiRouteValidatorTest extends TestCase {
         $validator->validate($httpRoute, $serverRequest);
     }
 
-    function testRequestBodyFailureContentInvalid() {
+    function testPostFailureContentInvalid() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/payments";
         $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))
-            ->withBody(json_encode(["date" => "2022-31-01"]));
+            ->withBody("plain text");
         $httpRoute          = new HttpRoute("/payments", "post", "requestHandlerClass");
         $this->expectException(InvalidArgumentException::class);
         $validator->validate($httpRoute, $serverRequest);
     }
+
+    function testPostFailureContentPropertyInvalid() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
+        $path               = "/payments";
+        $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))
+            ->withBody(json_encode(["paymentDate" => "2022-31-01"]));
+        $httpRoute          = new HttpRoute("/payments", "post", "requestHandlerClass");
+        $this->expectException(InvalidArgumentException::class);
+        $validator->validate($httpRoute, $serverRequest);
+    }
+
 }

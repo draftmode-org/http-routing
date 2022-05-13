@@ -12,13 +12,13 @@ use Terrazza\Component\Routing\RouteSearch;
 class OpenApiRouter implements HttpRoutingInterface {
     private LoggerInterface $logger;
     private string $routingFileName;
-    private OpenApiYamlReaderInterface $reader;
+    private OpenApiReaderInterface $reader;
     private IRouteMatcher $routeMatcher;
 
     public function __construct(string $routingFileName, LoggerInterface $logger) {
         $this->logger                               = $logger;
         $this->routingFileName                      = $routingFileName;
-        $this->reader                               = new OpenApiYamlReader($logger);
+        $this->reader                               = new OpenApiReader($logger);
         $this->routeMatcher                         = new RouteMatcher($logger);
     }
 

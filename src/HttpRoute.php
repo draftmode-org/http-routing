@@ -5,18 +5,18 @@ namespace Terrazza\Component\HttpRouting;
 class HttpRoute {
     private string $routePath;
     private string $routeMethod;
-    private string $requestHandlerClass;
+    private string $routeHandlerClass;
 
     /**
      * @param string $routePath
      * @param string $routeMethod
-     * @param string $requestHandlerClass
+     * @param string $routeHandlerClass
      */
-    public function __construct(string $routePath, string $routeMethod, string $requestHandlerClass)
+    public function __construct(string $routePath, string $routeMethod, string $routeHandlerClass)
     {
         $this->routePath                        = $routePath;
         $this->routeMethod                      = $routeMethod;
-        $this->requestHandlerClass              = $requestHandlerClass;
+        $this->routeHandlerClass                = $routeHandlerClass;
     }
 
     /**
@@ -38,8 +38,8 @@ class HttpRoute {
     /**
      * @return string
      */
-    public function getRequestHandlerClass(): string
+    public function getRouteHandlerClass(): string
     {
-        return $this->requestHandlerClass;
+        return $this->routeHandlerClass;
     }
 }
