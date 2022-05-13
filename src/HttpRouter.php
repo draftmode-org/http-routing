@@ -3,7 +3,6 @@
 namespace Terrazza\Component\HttpRouting;
 
 use Terrazza\Component\Http\Request\HttpServerRequestInterface;
-use Terrazza\Component\HttpRouting\Exception\HttpInvalidArgumentException;
 
 class HttpRouter implements HttpRouterInterface {
     private HttpRoutingInterface $httpRouting;
@@ -22,7 +21,6 @@ class HttpRouter implements HttpRouterInterface {
     /**
      * @param HttpServerRequestInterface $request
      * @return HttpRoute|null
-     * @throws HttpInvalidArgumentException
      */
     public function getRoute(HttpServerRequestInterface $request) : ?HttpRoute {
         if ($httpRoute = $this->httpRouting->getRoute($request)) {

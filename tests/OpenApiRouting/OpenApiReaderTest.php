@@ -24,23 +24,7 @@ class OpenApiReaderTest extends TestCase {
         $reader->load(__FILE__);
     }
 
-    function testFailureGetContentByRef() {
-        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
-        $reader             = new OpenApiReader($logger);
-        $reader             = $reader->load(self::yamlFileName);
-        $this->expectException(RuntimeException::class);
-        $reader->getContentByRef("unknown");
-    }
-
-    function testFailureGetContentByRefPartial() {
-        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
-        $reader             = new OpenApiReader($logger);
-        $reader             = $reader->load(self::yamlFileName);
-        $this->expectException(RuntimeException::class);
-        $reader->getContentByRef("#/components/requestBodies/unknown");
-    }
-
-    function testFailureGetContentByRefEmptyNode() {
+    function testFailureGetRequestBodyContentsEmptyNode() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $reader             = new OpenApiReader($logger);
         $reader             = $reader->load(self::yamlFailureFileName);
@@ -54,10 +38,12 @@ class OpenApiReaderTest extends TestCase {
         $reader             = $reader->load(self::yamlFileName);
         $this->assertEquals([
             true,
-            false
+            false, // method has no requestBody not found
+            false, // uri not found
         ],[
             !is_null($reader->getRequestBodyContents("/payments", "post")),
-            !is_null($reader->getRequestBodyContents("/payments", "get"))
+            !is_null($reader->getRequestBodyContents("/payments", "get")),
+            !is_null($reader->getRequestBodyContents("/unknown", "delete")),
         ]);
     }
 
@@ -77,35 +63,51 @@ class OpenApiReaderTest extends TestCase {
         $reader->getRequestBodyContents("/payments", "put");
     }
 
-    function testGetRequestBodyPropertiesOneOf() {
+    function testFailureGetParameterParamsNodeSchemaMissing() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+        $reader             = new OpenApiReader($logger);
+        $reader             = $reader->load(self::yamlFailureFileName);
+        $this->expectException(RuntimeException::class);
+        $reader->getParameterParams("/animals", "get", "query");
+    }
+
+    function testGetRequestBodyParamsOneOf() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $reader             = new OpenApiReader($logger);
         $reader             = $reader->load(self::yamlFileName);
         $contents           = $reader->getRequestBodyContents("/animals", "post");
-        $this->assertIsArray($reader->getRequestBodyProperties($contents, "application/json"));
+        $this->assertIsArray($reader->getRequestBodyParams($contents, "application/json"));
     }
 
-    function testFailureGetRequestBodyPropertiesContentType() {
+    function testFailureGetRequestBodyParamsContentType() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $reader             = new OpenApiReader($logger);
         $reader             = $reader->load(self::yamlFailureFileName);
         $this->expectException(InvalidArgumentException::class);
-        $reader->getRequestBodyProperties([], "application/json");
+        $reader->getRequestBodyParams([], "application/json");
     }
 
-    function testFailureGetRequestBodyPropertiesNodeSchemaMissing() {
+    function testFailureGetRequestBodyParamsNodeSchemaMissing() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $reader             = new OpenApiReader($logger);
         $reader             = $reader->load(self::yamlFailureFileName);
         $this->expectException(RuntimeException::class);
-        $reader->getRequestBodyProperties(["application/json" => []], "application/json");
+        $reader->getRequestBodyParams(["application/json" => []], "application/json");
     }
 
-    function testFailureGetRequestBodyPropertiesNodeTypeMissing() {
+    function testFailureGetRequestBodyParamsNodeTypeMissing() {
         $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
         $reader             = new OpenApiReader($logger);
         $reader             = $reader->load(self::yamlFailureFileName);
         $this->expectException(RuntimeException::class);
-        $reader->getRequestBodyProperties(["application/json" => ["schema" => []]], "application/json");
+        $reader->getRequestBodyParams(["application/json" => ["schema" => []]], "application/json");
+    }
+
+    function testFailureGetContentByRefNodeNotFound() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(true);
+        $reader             = new OpenApiReader($logger);
+        $reader             = $reader->load(self::yamlFailureFileName);
+        $this->expectException(RuntimeException::class);
+        $reader->getParameterParams("/animals", "patch", "query");
     }
 }

@@ -43,9 +43,44 @@ paths:
       responses:
         200:
           description: created successful
+    delete:
+      tags:
+        - Payments
+      operationId: payment_delete
+      requestBody:
+        $ref: "#/components/requestBodies/NodeSchemaMissing"
+      responses:
+        200:
+          description: created successful
+  "/animals":
+    parameters:
+      - in: query
+        name: test
+    patch:
+      tags:
+        - Animals
+      parameters:
+        - in: query
+          name: "invalidRef"
+          schema:
+            $ref: "#/components/requestBodies/InvalidRef"
+      operationId: animals_put
+      responses:
+        200:
+          description: fine
+    get:
+      tags:
+        - Animals
+      operationId: animals_get
+      responses:
+        200:
+          description: fine
 
 components:
   requestBodies:
+    NodeSchemaMissing:
+      content:
+        application/json:
     NodeContendMissing:
       description: "Missing"
     EmptyContent:

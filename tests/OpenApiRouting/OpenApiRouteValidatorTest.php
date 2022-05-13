@@ -114,8 +114,8 @@ class OpenApiRouteValidatorTest extends TestCase {
         $this->assertTrue(true);
     }
 
-    function testPostFailureOneOfDoesNotMatchAny() {
-        $logger             = (new Logger("OpenApiRouter"))->createLogger(false);
+    function xtestPostFailureNoOneOfMatches() {
+        $logger             = (new Logger("OpenApiRouter"))->createLogger(true);
         $validator          = new OpenApiRouteValidator(self::routingFileName, $logger);
         $path               = "/animals";
         $serverRequest      = (new HttpServerRequest("POST", new Uri(self::baseUri.$path)))

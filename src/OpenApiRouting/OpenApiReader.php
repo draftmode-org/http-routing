@@ -7,8 +7,9 @@ use RuntimeException;
 
 class OpenApiReader implements OpenApiReaderInterface {
     private LoggerInterface $logger;
-    private ?array $content=null;
-    private ?array $paths=null;
+    private ?array $content                         = null;
+    private ?array $paths                           = null;
+    private ?array $pathParameters                  = null;
     CONST multipleTypes = ["oneOf"];
 
     public function __construct(LoggerInterface $logger) {
@@ -37,41 +38,253 @@ class OpenApiReader implements OpenApiReaderInterface {
     /**
      * @return array
      */
-    public function getPaths() : array {
-        if (is_null($this->paths)) {
-            $skipMethods                            = ["parameters"];
-            $yaml                                   = $this->content ?? [];
-            $paths                                  = [];
-            foreach ($yaml["paths"] ?? [] as $uri => $methods) {
-                $uriParameters                      = [];
-                foreach ($methods as $method => $parameters) {
-                    if ($method === "parameters") {
-                        $uriParameters              = $parameters;
-                    }
+    public function getRoutes() : array {
+        $skipMethods                                = ["parameters"];
+        $yaml                                       = $this->content ?? [];
+        $paths                                      = [];
+        foreach ($yaml["paths"] ?? [] as $uri => $methods) {
+            foreach ($methods as $method => $properties) {
+                if (in_array($method, $skipMethods)) {
+                    continue;
                 }
-                foreach ($methods as $method => $properties) {
-                    if (in_array($method, $skipMethods)) {
-                        continue;
-                    }
-                    if (!array_key_exists($uri, $paths)) {
-                        $paths[$uri]                = [];
-                    }
-/* TODO no need to merge it that deep */
-                    $properties["parameters"]       = $this->mergeParameters($uriParameters, $properties["parameters"] ?? []);
-                    $paths[$uri][$method]           = $properties;
+                if (!array_key_exists($uri, $paths)) {
+                    $paths[$uri]                    = [];
                 }
+                $paths[$uri][$method]               = $properties["operationId"];
             }
-            $this->paths                            = $paths;
         }
-        return $this->paths;
+        return $paths;
     }
 
+    /**
+     * @param string $routePath
+     * @param string $routeMethod
+     * @param string $parametersType
+     * @return array|null
+     */
+    public function getParameterParams(string $routePath, string $routeMethod, string $parametersType) :?array {
+        $this->logger->debug("search for params for uri $routePath, method $routeMethod and type $parametersType");
+        if ($properties = $this->getPathParameters($routePath, $routeMethod)) {
+            $this->logger->debug("params for uri $routePath and method $routeMethod found");
+            if (array_key_exists($parametersType, $properties)) {
+                $this->logger->debug("params for uri $routePath, method $routeMethod and type $parametersType found");
+                return [
+                    "type"                          => "object",
+                    "properties"                    => $this->getEncodedProperties($properties[$parametersType])
+                ];
+            } else {
+                $this->logger->debug("no params for uri $routePath, method $routeMethod and type $parametersType found");
+            }
+        } else {
+            $this->logger->debug("no params for uri $routePath and method $routeMethod not found");
+        }
+        return null;
+    }
+
+    /**
+     * @param array $content
+     * @param string $contentType
+     * @return array
+     * @throws InvalidArgumentException
+     */
+    public function getRequestBodyParams(array $content, string $contentType): array {
+        $this->logger->debug("getRequestBodyParams for $contentType");
+        if (array_key_exists($contentType, $content)) {
+            $content                                = $content[$contentType];
+            if (array_key_exists("schema", $content)) {
+                $content                            = $content["schema"];
+                $this->logger->debug("getRequestBodyParams", $content);
+                return $this->getEncodedProperty("requestBody", $content);
+            } else {
+                throw new RuntimeException("node schema for requestBody/$contentType does not exist");
+            }
+        } else {
+            throw new InvalidArgumentException("requestBody Content-Type not accepted, given ".$contentType);
+        }
+    }
+
+    /**
+     * @param string $routePath
+     * @param string $routeMethod
+     * @return array|null
+     */
+    public function getRequestBodyContents(string $routePath, string $routeMethod) :?array {
+        $this->logger->debug("getRequestBodyParams for $routePath:$routeMethod");
+        $yaml                                       = $this->content ?? [];
+        foreach ($yaml["paths"] ?? [] as $uri => $methods) {
+            if ($uri === $routePath) {
+                $this->logger->debug("...path $uri found");
+                $requestBody                        = null;
+                $methodFound                        = false;
+                foreach ($methods as $method => $parameters) {
+                    if ($method === $routeMethod) {
+                        $methodFound                = true;
+                        $this->logger->debug("...method $method found");
+                        if (array_key_exists("requestBody", $parameters)) {
+                            $requestBody                = $parameters["requestBody"];
+                            $this->logger->debug("...requestBody found");
+                        } else {
+                            $this->logger->debug("...requestBody not found");
+                        }
+                        break;
+                    }
+                }
+                if ($methodFound) {
+                    if ($requestBody) {
+                        while (array_key_exists("\$ref", $requestBody)) {
+                            $propertyRef            = $requestBody["\$ref"];
+                            $this->logger->debug("...getContentByRef for $propertyRef");
+                            $requestBody            = $this->getContentByRef($propertyRef);
+                        }
+                        $contentNode                = "content";
+                        if (!array_key_exists($contentNode, $requestBody)) {
+                            throw new RuntimeException("node content for requestBody $routePath:$routeMethod does not exist");
+                        }
+                        $this->logger->debug("...requestBody & method found");
+                        return $requestBody[$contentNode];
+                    } else {
+                        return null;
+                    }
+                } else {
+                    throw new RuntimeException("...method $routeMethod for $routePath not found");
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @param string $routePath
+     * @param string $routeMethod
+     * @return array|null
+     */
+    private function getPathParameters(string $routePath, string $routeMethod) :?array {
+        $this->logger->debug("search for params in uri $routePath and method $routeMethod");
+        if (is_null($this->pathParameters)) {
+            $this->logger->debug("initialize params search");
+            $yaml                                   = $this->content ?? [];
+            foreach ($yaml["paths"] ?? [] as $uri => $methods) {
+                if ($uri === $routePath) {
+                    $this->logger->debug("uri $uri found");
+                    $uriParametersFound             = false;
+                    $methodParametersFound          = false;
+                    $uriParameter                   = [];
+                    $routeParameter                 = [];
+                    foreach ($methods as $method => $parameters) {
+                        if ($method === "parameters") {
+                            $this->logger->debug("method $method for uri $routePath found");
+                            $uriParameter           = $parameters;
+                            $uriParametersFound     = true;
+                        }
+                        if ($method === $routeMethod) {
+                            $this->logger->debug("method $method for uri $routePath found");
+                            $routeParameter         = $parameters["parameters"] ?? [];
+                            $methodParametersFound  = true;
+                        }
+                    }
+                    if ($uriParametersFound || $methodParametersFound) {
+                        $this->pathParameters       = $this->mergePathParameters($uriParameter, $routeParameter);
+                        return $this->pathParameters;
+                    }
+                }
+            }
+        }
+        return $this->pathParameters;
+    }
+
+    /**
+     * @param array $uriParameter
+     * @param array $methodParameter
+     * @return array
+     */
+    private function mergePathParameters(array $uriParameter, array $methodParameter) : array {
+        $this->logger->debug("merge parameters", ["uriParams" => $uriParameter, "methodParams" => $methodParameter]);
+        $parameters                                 = array_filter(array_merge($uriParameter, $methodParameter));
+        $response                                   = [];
+        foreach ($parameters as $parameter) {
+            $type                                   = $parameter["in"] ?? "-";
+            if (!array_key_exists($type, $response)) {
+                $response[$type]                    = [];
+            }
+            $name                                   = $parameter["name"] ?? "-";
+            $schemaNode                             = "schema";
+            if (!array_key_exists($schemaNode, $parameter)) {
+                throw new RuntimeException("node $schemaNode in parameters/$type for $name does not exist");
+            }
+            $parameterSchema                        = $parameter[$schemaNode];
+            if (array_key_exists("required", $parameter)) {
+                $parameterSchema["required"]        = $parameter["required"];
+            }
+            $response[$type][$name]                 = $parameterSchema;
+        }
+        return $response;
+    }
+
+    /**
+     * @param array $properties
+     * @return array
+     */
+    private function getEncodedProperties(array $properties) : array {
+        foreach ($properties as $propertyName => $property) {
+            $properties[$propertyName]              = $this->getEncodedProperty($propertyName, $property);
+        }
+        return $properties;
+    }
+
+    /**
+     * @param string $propertyName
+     * @param array $property
+     * @param string|null $parentPropertyName
+     * @return array
+     */
+    private function getEncodedProperty(string $propertyName, array $property, ?string $parentPropertyName=null) : array {
+        $this->logger->debug("getEncodedProperty for $propertyName");
+        $propertyRequired                           = $property["required"] ?? null;
+        while (array_key_exists("\$ref", $property)) {
+            $propertyRef                            = $property["\$ref"];
+            $this->logger->debug("...getContentByRef for $propertyRef");
+            $property                               = $this->getContentByRef($propertyRef);
+        }
+        foreach (self::multipleTypes as $multipleType) {
+            if (array_key_exists($multipleType, $property)) {
+                $property["type"]                   = $multipleType;
+                $property["properties"]             = $property[$multipleType];
+            }
+        }
+        $fullPropertyName                           = $parentPropertyName ? $parentPropertyName . "." . $propertyName : $propertyName;
+        if (array_key_exists("type", $property)) {
+            if (array_key_exists("properties", $property)) {
+                $childSchemas                       = [];
+                foreach ($property["properties"] as $childName => $childProperties) {
+                    $childSchema                    = $this->getEncodedProperty(
+                        $childName, $childProperties, $fullPropertyName);
+                    if (is_array($propertyRequired) &&
+                        in_array($childName, $propertyRequired)) {
+                        $childSchema["required"]    = true;
+                    }
+                    $childSchemas[$childName] = $childSchema;
+                }
+                $property["properties"]             = $childSchemas;
+                unset($property["required"]);
+            } else {
+                if ($propertyRequired === true) {
+                    $property["required"]           = true;
+                }
+            }
+            foreach (self::multipleTypes as $multipleType) {
+                unset($property[$multipleType]);
+            }
+            return $property;
+        } else {
+            throw new RuntimeException("node type for $fullPropertyName does not exist");
+        }
+    }
 
     /**
      * @param string $ref
      * @return array
      */
-    public function getContentByRef(string $ref) : array {
+    private function getContentByRef(string $ref) : array {
         $content                                = $this->content ?? [];
         $refs                                   = explode("/", $ref);
         array_shift($refs);
@@ -91,163 +304,5 @@ class OpenApiReader implements OpenApiReaderInterface {
             throw new RuntimeException("node ".join("/", $nodes). " exists, but does not have any content");
         }
         return $content;
-    }
-
-    /**
-     * @param string $routePath
-     * @param string $routeMethod
-     * @param string $parametersType
-     * @return array|null
-     */
-    public function getParameterProperties(string $routePath, string $routeMethod, string $parametersType) :?array {
-        $this->logger->debug("get properties for $routePath:$routeMethod");
-        if ($properties = $this->getPath($routePath, $routeMethod)) {
-            $this->logger->debug("...properties for $parametersType found");
-            if (array_key_exists($parametersType, $properties["parameters"])) {
-                return ["type" => "object", "properties" => $properties["parameters"][$parametersType]];
-            } else {
-                $this->logger->debug("...attribute parameters in properties not found");
-            }
-        } else {
-            $this->logger->debug("...properties for $parametersType found");
-        }
-        return null;
-    }
-
-    /**
-     * @param string $routePath
-     * @param string $routeMethod
-     * @return array|null
-     */
-    public function getRequestBodyContents(string $routePath, string $routeMethod) :?array {
-        $this->logger->debug("get requestBody content for $routePath:$routeMethod");
-        $properties                                 = $this->getPath($routePath, $routeMethod);
-        if (!is_array($properties)) {
-            throw new RuntimeException("path for $routePath:$routeMethod not found");
-        }
-        if (!array_key_exists("requestBody", $properties)) {
-            return null;
-        }
-        $requestBodyProperties                      = $properties["requestBody"];
-
-        if (array_key_exists("\$ref", $requestBodyProperties)) {
-            $contentRef                             = $requestBodyProperties["\$ref"];
-            $requestBodyProperties                  = $this->getContentByRef($contentRef);
-        }
-        $contentNode                                = "content";
-        if (!array_key_exists($contentNode, $requestBodyProperties)) {
-            throw new RuntimeException("node content for requestBody $routePath:$routeMethod does not exist");
-        }
-        $this->logger->debug("requestBody:content found");
-        return $requestBodyProperties[$contentNode];
-    }
-
-    /**
-     * @param array $content
-     * @param string $contentType
-     * @return array
-     */
-    public function getRequestBodyProperties(array $content, string $contentType) : array {
-        if (!array_key_exists($contentType, $content)) {
-            throw new InvalidArgumentException("requestBody Content-Type not accepted, given ".$contentType);
-        }
-        $content                                    = $content[$contentType];
-        $schemaNode                                 = "schema";
-        if (!is_array($content) ||
-            !array_key_exists($schemaNode, $content)) {
-            throw new RuntimeException("node $schemaNode for $contentType does not exist or is not an array");
-        }
-        return $this->buildContentProperties("requestBody", $content[$schemaNode]);
-    }
-
-    /**
-     * @param string $propertyName
-     * @param array $properties
-     * @param string|null $parentName
-     * @return array
-     */
-    private function buildContentProperties(string $propertyName, array $properties, ?string $parentName=null) : array {
-        $this->logger->debug("buildContentProperties for $propertyName", $properties);
-        $propertyRequired                           = $properties["required"] ?? null;
-        while (array_key_exists("\$ref", $properties)) {
-            $propertyRef                            = $properties["\$ref"];
-            $this->logger->debug("...load property ref $propertyRef");
-            $properties                             = $this->getContentByRef($properties["\$ref"]);
-        }
-        $propertyFullName                           = $parentName ? $parentName . "." . $propertyName : $propertyName;
-        foreach (self::multipleTypes as $multipleType) {
-            if (array_key_exists($multipleType, $properties)) {
-                $properties["type"]                 = $multipleType;
-                $properties["properties"]           = $properties[$multipleType];
-            }
-        }
-        if (array_key_exists("type", $properties)) {
-             if (array_key_exists("properties", $properties)) {
-                $childSchemas = [];
-                foreach ($properties["properties"] as $childName => $childProperties) {
-                    $childSchema = $this->buildContentProperties(
-                        $childName, $childProperties, $propertyFullName);
-                    if (is_array($propertyRequired) &&
-                        in_array($childName, $propertyRequired)) {
-                        $childSchema["required"] = true;
-                    }
-                    $childSchemas[$childName] = $childSchema;
-                }
-                $properties["properties"] = $childSchemas;
-                unset($properties["required"]);
-            } else {
-                if ($propertyRequired === true) {
-                    $properties["required"] = true;
-                }
-            }
-            foreach (self::multipleTypes as $multipleType) {
-                unset($properties[$multipleType]);
-            }
-            return $properties;
-        } else {
-            throw new RuntimeException("node type for $propertyFullName does not exist");
-        }
-    }
-
-    /**
-     * @param array $uriParameters
-     * @param array $methodParameters
-     * @return array
-     */
-    private function mergeParameters(array $uriParameters, array $methodParameters) : array {
-        $parameters                                 = array_filter(array_merge($uriParameters, $methodParameters));
-        $response                                   = [];
-        foreach ($parameters as $parameter) {
-            $type                                   = $parameter["in"] ?? "-";
-            if (!array_key_exists($type, $response)) {
-                $response[$type]                    = [];
-            }
-            $name                                   = $parameter["name"] ?? "-";
-            $schemaNode                             = "schema";
-            if (!array_key_exists($schemaNode, $parameter)) {
-                throw new RuntimeException("node $schemaNode in parameters/$type for $name does not exist");
-            }
-            $parameterSchema                        = $parameter[$schemaNode];
-            if (array_key_exists("required", $parameter)) {
-                $parameterSchema["required"]        = $parameter["required"];
-            }
-            $response[$type][$name]                 = $this->buildContentProperties($name, $parameterSchema);
-        }
-        return $response;
-    }
-
-    /**
-     * @param string $path
-     * @param string $method
-     * @return array|null
-     */
-    private function getPath(string $path, string $method) :?array {
-        $paths                                       = $this->getPaths();
-        if (array_key_exists($path, $paths)) {
-            if (array_key_exists($method, $paths[$path])) {
-                return $paths[$path][$method];
-            }
-        }
-        return null;
     }
 }

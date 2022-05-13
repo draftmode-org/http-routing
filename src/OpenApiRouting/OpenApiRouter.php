@@ -27,6 +27,7 @@ class OpenApiRouter implements HttpRoutingInterface {
      * @return HttpRoute|null
      */
     public function getRoute(HttpServerRequestInterface $request) :?HttpRoute {
+        $this->logger->debug("getRoute");
         //
         $yaml                                       = $this->reader->load($this->routingFileName);
         //
@@ -34,17 +35,21 @@ class OpenApiRouter implements HttpRoutingInterface {
             $request->getUri()->getPath(),
             $request->getMethod(),
         );
-        foreach ($yaml->getPaths() as $uri => $methods) {
-            foreach ($methods as $method => $properties) {
+        $skipMethods                                = ["parameters", "summary", "head"];
+        foreach ($yaml->getRoutes() as $uri => $methods) {
+            foreach ($methods as $method => $operationId) {
+                if (in_array($method, $skipMethods)) continue;
+                $this->logger->debug("...search for $uri / $method");
                 $route                              = new Route(
                     $uri,
                     $method
                 );
                 if ($this->routeMatcher->routeMatch($routeSearch, $route)) {
+                    $this->logger->debug("...route found, use routeHandlerClass $operationId");
                     return new HttpRoute(
                         $uri,
                         $method,
-                        $properties["operationId"]
+                        $operationId
                     );
                 }
             }

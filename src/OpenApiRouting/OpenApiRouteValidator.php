@@ -33,40 +33,40 @@ class OpenApiRouteValidator implements HttpRoutingValidatorInterface {
         //
         // validate pathParam
         //
-        if ($params = $yaml->getParameterProperties($uri, $method, "path")) {
+        if ($params = $yaml->getParameterParams($uri, $method, "path")) {
             $validator->validate("pathParam", $request->getPathParams($uri), $params);
         }
         //
         // validate queryParam
         //
-        if ($params = $yaml->getParameterProperties($uri, $method, "query")) {
+        if ($params = $yaml->getParameterParams($uri, $method, "query")) {
             $validator->validate("queryParam", $request->getQueryParams(), $params);
         }
         /*
          * actually not implemented, knowledge
          *
-        if ($params = $yaml->getParameterProperties($uri, $method, "header")) {
+        if ($params = $yaml->getParameterParams($uri, $method, "header")) {
             $validator->validate("headerParam", $request->getCookieParams(), $params);
         }
         */
         /*
          * actually not implemented, knowledge
          *
-        if ($params = $yaml->getParameterProperties($uri, $method, "cookie")) {
+        if ($params = $yaml->getParameterParams($uri, $method, "cookie")) {
             $validator->validate("cookieParam", $request->getCookieParams(), $params);
         }
         */
         //
         // validate requestBody
         //
-        if ($requestBodies = $yaml->getRequestBodyContents($uri, $method)) {
+        if ($requestBodyParams = $yaml->getRequestBodyContents($uri, $method)) {
             $requestContentType                     = $request->getHeaderLine("Content-Type");
             if (strlen($requestContentType) === 0) {
                 $requestContentType                 = $this->defaultContentType;
             }
-            $requestParams                          = $yaml->getRequestBodyProperties($requestBodies, $requestContentType);
+            $requestBodyParams                      = $yaml->getRequestBodyParams($requestBodyParams, $requestContentType);
             $requestBody                            = $this->getRequestBodyEncoded($requestContentType, $request->getBody()->getContents());
-            $validator->validate("requestBody", $requestBody, $requestParams);
+            $validator->validate("requestBody", $requestBody, $requestBodyParams);
         }
     }
 
