@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2f79d8c87deeea706eb4806bb5eccd38",
+    "content-hash": "f13cc1959317f86215f0c710e423474a",
     "packages": [
         {
             "name": "psr/http-client",
@@ -374,16 +374,16 @@
         },
         {
             "name": "terrazza/validator",
-            "version": "dev-main",
+            "version": "1.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/terrazza/validator.git",
-                "reference": "22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7"
+                "reference": "9b69397307d4048eb00c6da5def0d2a82f50a7fb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/terrazza/validator/zipball/22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7",
-                "reference": "22f6124d90dc4c76b2cb4ba1ccaa38c32c1655f7",
+                "url": "https://api.github.com/repos/terrazza/validator/zipball/9b69397307d4048eb00c6da5def0d2a82f50a7fb",
+                "reference": "9b69397307d4048eb00c6da5def0d2a82f50a7fb",
                 "shasum": ""
             },
             "require": {
@@ -397,7 +397,6 @@
                 "terrazza/dev-logger": "dev-main",
                 "vimeo/psalm": "4.x-dev"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -417,9 +416,9 @@
             "description": "Terrazza Component Validator",
             "support": {
                 "issues": "https://github.com/terrazza/validator/issues",
-                "source": "https://github.com/terrazza/validator/tree/main"
+                "source": "https://github.com/terrazza/validator/tree/v1.0.0"
             },
-            "time": "2022-05-12T20:26:47+00:00"
+            "time": "2022-05-17T20:02:39+00:00"
         }
     ],
     "packages-dev": [
@@ -3102,12 +3101,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/console.git",
-                "reference": "f7e29ecb38b7536fa544108b8a7962697273d88c"
+                "reference": "18949198428c079e9cbe7be63fd628d74e7f2751"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/console/zipball/f7e29ecb38b7536fa544108b8a7962697273d88c",
-                "reference": "f7e29ecb38b7536fa544108b8a7962697273d88c",
+                "url": "https://api.github.com/repos/symfony/console/zipball/18949198428c079e9cbe7be63fd628d74e7f2751",
+                "reference": "18949198428c079e9cbe7be63fd628d74e7f2751",
                 "shasum": ""
             },
             "require": {
@@ -3194,7 +3193,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2022-05-10T09:18:46+00:00"
+            "time": "2022-05-14T12:51:09+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -4064,12 +4063,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/vimeo/psalm.git",
-                "reference": "b37da4ae1f9f61735ac9efe8345e75607c40305e"
+                "reference": "894e4e4c0208b4cd6626edf8e77456edc18c7779"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vimeo/psalm/zipball/b37da4ae1f9f61735ac9efe8345e75607c40305e",
-                "reference": "b37da4ae1f9f61735ac9efe8345e75607c40305e",
+                "url": "https://api.github.com/repos/vimeo/psalm/zipball/894e4e4c0208b4cd6626edf8e77456edc18c7779",
+                "reference": "894e4e4c0208b4cd6626edf8e77456edc18c7779",
                 "shasum": ""
             },
             "require": {
@@ -4164,7 +4163,7 @@
                 "issues": "https://github.com/vimeo/psalm/issues",
                 "source": "https://github.com/vimeo/psalm/tree/4.x"
             },
-            "time": "2022-05-12T20:58:24+00:00"
+            "time": "2022-05-17T18:54:58+00:00"
         },
         {
             "name": "webmozart/assert",
@@ -4281,7 +4280,6 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
-        "terrazza/validator": 20,
         "terrazza/routing": 20,
         "terrazza/http": 20,
         "terrazza/dev-logger": 20,
